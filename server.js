@@ -1,6 +1,10 @@
 //This first line of code must always be included into a server file when using express
 const express = require('express');
 
+//This assigns the sqlite3 package to a const var
+//This statement sets the execution mode to verbose to produce messages in the terminal regarding the state of the runtime
+const sqlite3 = require('sqlite3').verbose();
+
 //This assigns the Port that will be used by the server(3001)
 const PORT = process.env.PORT || 3001;
 //This assigns the express functionality that we will use when running the server
@@ -10,11 +14,95 @@ const app = express();
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
+//Connect to Database
+const db = new sqlite3.Database('./db/election.db', err => {
+    if (err) {
+        return console.error(err.message);
+    }
+
+    console.log('Connected To The Election Database.');
+});
+
 //This is just a test route to see if server was running
 // app.get('/', (req, res) => {
 //     res.json({
 //         message: 'Hello World'
 //     });
+// });
+
+/*AS a user, I can request a list of all potential candidates.
+• The .all() method d runs the SQL query and executes the callback with all the resulting rows that match the query.
+• Rows, which is the database query response.
+• GET route for all candidates */
+app.get('/api/candidates', (req, res) => {
+    const sql = `SELECT * FROM candidates`;
+    const params = [];
+
+    db.all(sql, params, (err, rows) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+
+        res.json({
+            message: 'Success',
+            data: rows
+        });
+    });
+});
+
+/*AS a user, I can request a single candidates's information
+• This get() method runs the SQL query and executes the callback with the specific request information in the WHERE
+• In this case, we requested info based on the ID of the row.
+• GET route for single candidate
+• Error status code(400) will notify the client that their request wasn't accepted and to try a different request.*/
+app.get('/api/candidate/:id', (req, res) => {
+    const sql = `SELECT * FROM candidates WHERE id = ?`;
+    const params = [req.params.id];
+
+    db.get(sql, params, (err, row) => {
+        if (err) {
+            res.status(400).json({ error: err.message });
+            return;
+        }
+
+        res.json({
+            message: 'Data Retrieved',
+            data: row
+        });
+    });
+});
+
+/*AS a user, i want to delete a candidate
+• The run() method executes an SQL query but wont retrieve any result data
+• We used function instead of => so that we can use the changes property. */
+app.delete('/api/candidate/:id', (req, res) => {
+    const sql = `DELETE FROM candidates WHERE id = ?`;
+    const params = [req.params.id];
+
+    db.run(sql, params, function (err, result) {
+        if (err) {
+            res.status(400).json({ error: res.message });
+            return;
+        }
+
+        res.json({
+            message: 'Deleted Successfully',
+            changes: this.changes
+        });
+    });
+});
+
+//Create Candidate
+// const sql = `INSERT INTO candidates(id, first_name, last_name, industry_connected)
+//                 VALUES (?, ?, ?, ?)`;
+// const params = [1, 'Ronald', 'Firbank', 1];
+// // ES5 function, not arrow function, to use this
+// db.run(sql, params, function (err, result) {
+//     if (err) {
+//         console.log(err);
+//     }
+//     console.log(result, this.lastID);
 // });
 
 // Default response for any other requests(NOT FOUND) Catch all
@@ -25,6 +113,9 @@ app.use((req, res) => {
 });
 
 //This function will start the Express.js server on port 3001
-app.listen(PORT, () => {
-    console.log(`Server runnning on Port: ${PORT}`);
+//Start Server After Database Connection, We must wrap the Express connection in an event handler
+db.on('open', () => {
+    app.listen(PORT, () => {
+        console.log(`Server runnning on Port: ${PORT}`);
+    });
 });
